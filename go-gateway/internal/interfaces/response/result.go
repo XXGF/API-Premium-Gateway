@@ -1,15 +1,21 @@
+// Package response 定义了统一的 API 响应结构。
+//
+// 该包属于 DDD 架构的接口层，提供统一的 Result 响应格式，
+// 确保所有 API 接口返回一致的 JSON 结构。
 package response
 
 import (
 	"time"
 )
 
-// Result 通用API响应结果
+// Result 统一 API 响应结果。
+//
+// 所有接口都返回此结构，包含状态码、消息、数据和时间戳。
 type Result struct {
-	Code      int         `json:"code"`
-	Message   string      `json:"message"`
-	Data      interface{} `json:"data,omitempty"`
-	Timestamp int64       `json:"timestamp"`
+	Code      int         `json:"code"`              // 状态码：200=成功，400=参数错误，401=未授权，404=未找到，500=服务器错误
+	Message   string      `json:"message"`           // 操作结果描述
+	Data      interface{} `json:"data,omitempty"`     // 响应数据，失败时为 null
+	Timestamp int64       `json:"timestamp"`         // 响应时间戳（毫秒）
 }
 
 // Success 成功响应

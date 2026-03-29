@@ -1,3 +1,7 @@
+// Package service 实现了 ApiKey 领域的核心业务逻辑。
+//
+// 该包属于 DDD 架构的领域层，包含 ApiKeyDomainService，
+// 负责 API Key 的生成、校验、生命周期管理等核心业务逻辑。
 package service
 
 import (
@@ -12,14 +16,18 @@ import (
 	"github.com/lucky-aeon/api-premium-gateway/go-gateway/internal/infrastructure/exception"
 )
 
+// API Key 生成的配置常量
 const (
-	apiKeyPrefix = "gw_"
-	apiKeyLength = 32
-	apiKeyChars  = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-	maxAttempts  = 10
+	apiKeyPrefix = "gw_"  // Key 值前缀，用于标识 Gateway 生成的 Key
+	apiKeyLength = 32     // Key 随机部分的字符长度
+	apiKeyChars  = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" // Key 随机字符集
+	maxAttempts  = 10     // 生成唯一 Key 的最大尝试次数
 )
 
-// ApiKeyDomainService API Key 领域服务
+// ApiKeyDomainService API Key 领域服务。
+//
+// 负责 API Key 的生成、校验、CRUD 等核心业务逻辑。
+// Key 生成规则："gw_" 前缀 + 32 位加密安全随机字符，保证唯一性。
 type ApiKeyDomainService struct {
 	apiKeyRepository repository.ApiKeyRepository
 }
@@ -29,7 +37,9 @@ func NewApiKeyDomainService(repo repository.ApiKeyRepository) *ApiKeyDomainServi
 	return &ApiKeyDomainService{apiKeyRepository: repo}
 }
 
-// GenerateApiKey 生成 API Key
+// GenerateApiKey 生成新的 API Key。
+//
+// 自动生成唯一的 Key 值（最多尝试 10 次），初始状态为 UNUSED。
 func (s *ApiKeyDomainService) GenerateApiKey(description string, expiresAt *time.Time) (*entity.ApiKeyEntity, error) {
 	log.Info().Str("description", description).Msg("生成 API Key")
 
@@ -114,7 +124,9 @@ func (s *ApiKeyDomainService) IsUsable(apiKeyValue string) bool {
 	return apiKey.IsUsable()
 }
 
-// IsValidApiKey 校验 API Key 是否有效（用于拦截器）
+// IsValidApiKey 校验 API Key 是否有效（用于认证中间件）。
+//
+// 检查 Key 是否存在且状态可用（ACTIVE 或 UNUSED）。
 func (s *ApiKeyDomainService) IsValidApiKey(apiKeyValue string) bool {
 	return s.IsUsable(apiKeyValue)
 }
@@ -139,7 +151,10 @@ func (s *ApiKeyDomainService) ExistApiKey(apiKeyValue string) bool {
 	return err == nil && apiKey != nil
 }
 
-// generateUniqueApiKeyValue 生成唯一的 API Key 值
+// generateUniqueApiKeyValue 生成唯一的 API Key 值。
+//
+// 最多尝试 maxAttempts 次，每次生成后检查数据库中是否已存在。
+// 如果超过最大尝试次数仍未生成唯一值，返回错误。
 func (s *ApiKeyDomainService) generateUniqueApiKeyValue() (string, error) {
 	for i := 0; i < maxAttempts; i++ {
 		apiKeyValue := s.generateApiKeyValue()
@@ -154,7 +169,9 @@ func (s *ApiKeyDomainService) generateUniqueApiKeyValue() (string, error) {
 	return "", exception.ApiKeyGenerationFailedError("尝试次数超过最大限制")
 }
 
-// generateApiKeyValue 生成 API Key 值
+// generateApiKeyValue 生成 API Key 值。
+//
+// 格式："gw_" + 32 位加密安全随机字符（使用 crypto/rand）。
 func (s *ApiKeyDomainService) generateApiKeyValue() string {
 	result := apiKeyPrefix
 	chars := []byte(apiKeyChars)

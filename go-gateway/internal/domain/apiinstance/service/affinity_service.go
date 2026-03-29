@@ -9,7 +9,11 @@ import (
 	"github.com/lucky-aeon/api-premium-gateway/go-gateway/internal/domain/apiinstance/entity"
 )
 
-// AffinityService 亲和性服务
+// AffinityService 亲和性服务。
+//
+// 管理亲和性绑定的生命周期，包括创建、查询、刷新和清除绑定。
+// 使用 go-cache 本地内存缓存存储绑定关系，默认 60 分钟过期，10 分钟清理一次。
+// 绑定键格式："{affinityType}:{affinityKey}"。
 type AffinityService struct {
 	bindingCache *cache.Cache
 }
@@ -21,7 +25,10 @@ func NewAffinityService() *AffinityService {
 	return &AffinityService{bindingCache: c}
 }
 
-// GetBoundInstance 获取绑定的实例ID
+// GetBoundInstance 获取亲和性绑定的实例 ID。
+//
+// 如果绑定存在且未过期，返回绑定的实例 ID；
+// 如果绑定不存在或已过期，返回空字符串。
 func (s *AffinityService) GetBoundInstance(affinityType, affinityKey string) string {
 	bindingKey := buildBindingKey(affinityType, affinityKey)
 	val, found := s.bindingCache.Get(bindingKey)

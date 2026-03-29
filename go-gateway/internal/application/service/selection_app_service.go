@@ -1,3 +1,8 @@
+// Package service 实现了应用层的业务编排服务。
+//
+// 该包属于 DDD 架构的应用层，负责编排多个领域服务的协作流程，
+// 包括实例选择、调用结果上报、降级链处理等。
+// 事务管理应在此层处理。
 package service
 
 import (
@@ -14,7 +19,15 @@ import (
 	"github.com/lucky-aeon/api-premium-gateway/go-gateway/internal/interfaces/request"
 )
 
-// SelectionAppService 选择算法应用服务
+// SelectionAppService 选择算法应用服务。
+//
+// 编排 API 实例选择的完整流程，包括：
+//   - 项目存在性验证
+//   - 候选实例查找
+//   - 指标数据获取
+//   - 健康实例过滤（排除熔断实例）
+//   - 负载均衡策略选择
+//   - 降级链（Fallback Chain）处理
 type SelectionAppService struct {
 	apiInstanceSelectionDomainService *apiInstanceService.ApiInstanceSelectionDomainService
 	metricsCollectionDomainService   *metricsService.MetricsCollectionDomainService
@@ -34,7 +47,12 @@ func NewSelectionAppService(
 	}
 }
 
-// SelectBestInstance 选择最佳API实例（支持降级）
+// SelectBestInstance 选择最佳 API 实例（支持降级）。
+//
+// 完整流程：
+//  1. 尝试按主要标识符选择实例
+//  2. 如果失败且请求中包含 FallbackChain，则依次尝试降级标识符
+//  3. 如果所有降级均失败，返回 FALLBACK_EXHAUSTED 错误
 func (s *SelectionAppService) SelectBestInstance(req *request.SelectInstanceRequest, currentProjectID string) (*dto.ApiInstanceDTO, error) {
 	log.Info().Str("apiIdentifier", req.ApiIdentifier).Msg("应用层开始选择API实例")
 
@@ -54,7 +72,16 @@ func (s *SelectionAppService) SelectBestInstance(req *request.SelectInstanceRequ
 	return result, nil
 }
 
-// selectInstanceInternal 内部实例选择方法
+// selectInstanceInternal 内部实例选择方法。
+//
+// 执行完整的实例选择流程：
+//  1. 转换请求为领域命令
+//  2. 验证项目存在
+//  3. 查找候选实例
+//  4. 获取实例指标
+//  5. 过滤熔断实例
+//  6. 使用策略选择最佳实例
+//  7. 转换为 DTO 返回
 func (s *SelectionAppService) selectInstanceInternal(req *request.SelectInstanceRequest, currentProjectID string) (*dto.ApiInstanceDTO, error) {
 	// 1. 转换为领域命令
 	cmd := assembler.SelectRequestToCommand(req, currentProjectID)
@@ -103,7 +130,11 @@ func (s *SelectionAppService) selectInstanceInternal(req *request.SelectInstance
 	return result, nil
 }
 
-// tryFallbackInstances 尝试降级实例选择
+// tryFallbackInstances 尝试降级实例选择。
+//
+// 依次遍历 FallbackChain 中的备选标识符，
+// 尝试为每个标识符选择可用实例。
+// 任一成功即返回，全部失败则返回 FALLBACK_EXHAUSTED 错误。
 func (s *SelectionAppService) tryFallbackInstances(req *request.SelectInstanceRequest, currentProjectID string) (*dto.ApiInstanceDTO, error) {
 	log.Info().Strs("fallbackChain", req.FallbackChain).Msg("开始尝试降级实例选择")
 
@@ -135,7 +166,10 @@ func (s *SelectionAppService) tryFallbackInstances(req *request.SelectInstanceRe
 	return nil, exception.NewBusinessErrorWithCode("FALLBACK_EXHAUSTED", "降级链为空或处理异常")
 }
 
-// ReportCallResult 上报调用结果
+// ReportCallResult 上报调用结果。
+//
+// 将上游服务的调用结果（成功/失败、延迟、错误信息等）
+// 转发给 MetricsCollectionDomainService 进行指标记录和健康状态更新。
 func (s *SelectionAppService) ReportCallResult(req *request.ReportResultRequest, projectID string) error {
 	log.Info().Str("instanceId", req.InstanceID).Bool("success", req.Success).Msg("应用层开始处理调用结果上报")
 

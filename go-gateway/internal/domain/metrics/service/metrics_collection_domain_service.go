@@ -1,3 +1,7 @@
+// Package service 实现了 Metrics 领域的核心业务逻辑。
+//
+// 该包属于 DDD 架构的领域层，包含 MetricsCollectionDomainService，
+// 负责记录 API 调用结果、聚合指标数据、评估健康状态和熔断判断。
 package service
 
 import (
@@ -11,15 +15,18 @@ import (
 	"github.com/lucky-aeon/api-premium-gateway/go-gateway/internal/domain/metrics/repository"
 )
 
-// 选择算法配置常量
+// 熔断和健康评估的配置常量
 const (
-	CircuitBreakerErrorRateThreshold = 0.5
-	CircuitBreakerMinRequestCount    = 10
-	ShortTermWindowMinutes           = 5
-	LatencyScoreMaxMs                = 5000
+	CircuitBreakerErrorRateThreshold = 0.5 // 熔断触发阈值：成功率低于 50% 时触发熔断
+	CircuitBreakerMinRequestCount    = 10  // 熔断最小调用次数：调用次数不足时不触发熔断
+	ShortTermWindowMinutes           = 5   // 短期时间窗口：查询最近 5 分钟内的指标数据
+	LatencyScoreMaxMs                = 5000 // 延迟降级阈值：平均延迟超过 5000ms 时标记为降级
 )
 
-// MetricsCollectionDomainService 指标收集领域服务
+// MetricsCollectionDomainService 指标收集领域服务。
+//
+// 负责记录 API 调用结果、更新指标数据、评估实例健康状态。
+// 使用互斥锁保证并发安全，指标数据按分钟级时间窗口存储。
 type MetricsCollectionDomainService struct {
 	metricsRepository repository.MetricsRepository
 	mu                sync.Mutex
@@ -32,7 +39,13 @@ func NewMetricsCollectionDomainService(repo repository.MetricsRepository) *Metri
 	}
 }
 
-// RecordCallResult 记录API调用结果
+// RecordCallResult 记录 API 调用结果。
+//
+// 完整流程：
+//  1. 获取或创建当前分钟时间窗口的指标记录
+//  2. 更新成功/失败计数和延迟数据
+//  3. 根据指标重新评估 Gateway 健康状态（熔断/降级/健康）
+//  4. 持久化指标记录
 func (s *MetricsCollectionDomainService) RecordCallResult(cmd *command.CallResultCommand) error {
 	log.Info().Str("instanceId", cmd.InstanceID).Bool("success", cmd.Success).Msg("开始记录调用结果")
 
@@ -66,7 +79,11 @@ func (s *MetricsCollectionDomainService) RecordCallResult(cmd *command.CallResul
 	return nil
 }
 
-// GetInstanceMetrics 获取实例指标数据
+// GetInstanceMetrics 获取实例指标数据。
+//
+// 查询最近 ShortTermWindowMinutes 分钟内的指标数据，
+// 并按实例 ID 聚合，取每个实例最新的指标记录。
+// 返回 map[instanceID]*InstanceMetricsEntity。
 func (s *MetricsCollectionDomainService) GetInstanceMetrics(instanceIDs []string) (map[string]*entity.InstanceMetricsEntity, error) {
 	if len(instanceIDs) == 0 {
 		return make(map[string]*entity.InstanceMetricsEntity), nil
@@ -138,7 +155,13 @@ func (s *MetricsCollectionDomainService) updateMetrics(metrics *entity.InstanceM
 	}
 }
 
-// updateGatewayStatus 更新Gateway状态
+// updateGatewayStatus 根据指标数据更新 Gateway 健康状态。
+//
+// 判断逻辑：
+//  1. 调用次数 < 10 → 保持 HEALTHY（样本不足，不做判断）
+//  2. 成功率 < 50% → CIRCUIT_BREAKER_OPEN（触发熔断）
+//  3. 平均延迟 > 5000ms → DEGRADED（标记降级）
+//  4. 其他情况 → HEALTHY
 func (s *MetricsCollectionDomainService) updateGatewayStatus(metrics *entity.InstanceMetricsEntity) {
 	successRate := metrics.GetSuccessRate()
 	totalCalls := metrics.GetTotalCount()

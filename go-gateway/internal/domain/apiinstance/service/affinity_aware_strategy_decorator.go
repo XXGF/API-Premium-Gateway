@@ -10,7 +10,16 @@ import (
 	"github.com/lucky-aeon/api-premium-gateway/go-gateway/internal/domain/apiinstance/strategy"
 )
 
-// AffinityAwareStrategyDecorator 亲和性感知的策略装饰器
+// AffinityAwareStrategyDecorator 亲和性感知的策略装饰器。
+//
+// 采用装饰器模式（Decorator Pattern），在负载均衡策略之上叠加亲和性绑定逻辑。
+// 工作流程：
+//  1. 检查是否有亲和性要求，没有则直接使用负载均衡策略
+//  2. 查找现有绑定，如果绑定实例可用则直接返回
+//  3. 绑定实例不可用时，根据亲和性强度决定行为（报错/重新选择）
+//  4. 没有绑定时，使用策略选择新实例并创建绑定
+//
+// 注意：当前版本亲和性功能暂时禁用（与 Java 版本一致）。
 type AffinityAwareStrategyDecorator struct {
 	affinityService *AffinityService
 }
@@ -20,7 +29,13 @@ func NewAffinityAwareStrategyDecorator(affinityService *AffinityService) *Affini
 	return &AffinityAwareStrategyDecorator{affinityService: affinityService}
 }
 
-// SelectInstanceWithAffinity 带亲和性的实例选择
+// SelectInstanceWithAffinity 带亲和性的实例选择。
+//
+// 在负载均衡策略之上叠加亲和性绑定逻辑：
+//   - 无亲和性要求：直接使用负载均衡策略
+//   - 有绑定且可用：刷新绑定并返回绑定实例
+//   - 有绑定但不可用：根据强度处理（strict 报错 / preferred 重选）
+//   - 无绑定：策略选择新实例并创建绑定
 func (d *AffinityAwareStrategyDecorator) SelectInstanceWithAffinity(
 	candidates []*entity.ApiInstanceEntity,
 	metricsMap map[string]*metricsEntity.InstanceMetricsEntity,
@@ -69,7 +84,12 @@ func (d *AffinityAwareStrategyDecorator) SelectInstanceWithAffinity(
 	return selectedInstance, nil
 }
 
-// handleUnavailableBinding 处理绑定实例不可用的情况
+// handleUnavailableBinding 处理绑定实例不可用的情况。
+//
+// 根据亲和性强度采取不同策略：
+//   - strict：直接返回错误，不允许切换到其他实例
+//   - preferred：清除旧绑定，使用策略重新选择并创建新绑定
+//   - 其他：直接使用负载均衡策略
 func (d *AffinityAwareStrategyDecorator) handleUnavailableBinding(
 	candidates []*entity.ApiInstanceEntity,
 	metricsMap map[string]*metricsEntity.InstanceMetricsEntity,

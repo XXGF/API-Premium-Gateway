@@ -1,3 +1,7 @@
+// Package entity 定义了 ApiKey 领域的核心实体和枚举。
+//
+// 该包属于 DDD 架构的领域层，包含 ApiKeyEntity 聚合根，
+// 用于管理 API Key 的生命周期（创建、激活、撤销、过期）。
 package entity
 
 import (
@@ -5,14 +9,14 @@ import (
 	"time"
 )
 
-// ApiKeyStatus API Key 状态
+// ApiKeyStatus 定义了 API Key 的生命周期状态。
 type ApiKeyStatus string
 
 const (
-	ApiKeyStatusActive  ApiKeyStatus = "ACTIVE"
-	ApiKeyStatusRevoked ApiKeyStatus = "REVOKED"
-	ApiKeyStatusExpired ApiKeyStatus = "EXPIRED"
-	ApiKeyStatusUnused  ApiKeyStatus = "UNUSED"
+	ApiKeyStatusActive  ApiKeyStatus = "ACTIVE"  // 激活状态，可正常使用
+	ApiKeyStatusRevoked ApiKeyStatus = "REVOKED" // 已撤销，永久失效
+	ApiKeyStatusExpired ApiKeyStatus = "EXPIRED" // 已过期，超过有效期
+	ApiKeyStatusUnused  ApiKeyStatus = "UNUSED"  // 未使用，刚创建尚未首次使用
 )
 
 // ApiKeyStatusFromCode 根据代码获取状态
@@ -36,17 +40,21 @@ func (s ApiKeyStatus) IsUsable() bool {
 	return s == ApiKeyStatusActive || s == ApiKeyStatusUnused
 }
 
-// ApiKeyEntity API Key 领域实体
+// ApiKeyEntity 是 ApiKey 领域的聚合根。
+//
+// 代表一个独立管理的 API Key，用于接口认证。
+// Key 值以 "gw_" 前缀 + 32 位随机字符生成。
+// 对应数据库表 api_keys。
 type ApiKeyEntity struct {
-	ID          string       `gorm:"column:id;primaryKey" json:"id"`
-	ApiKeyValue string       `gorm:"column:api_key_value" json:"api_key_value"`
-	Description string       `gorm:"column:description" json:"description"`
-	Status      ApiKeyStatus `gorm:"column:status" json:"status"`
-	IssuedAt    time.Time    `gorm:"column:issued_at;autoCreateTime" json:"issued_at"`
-	ExpiresAt   *time.Time   `gorm:"column:expires_at" json:"expires_at"`
-	LastUsedAt  *time.Time   `gorm:"column:last_used_at" json:"last_used_at"`
-	CreatedAt   time.Time    `gorm:"column:created_at;autoCreateTime" json:"created_at"`
-	UpdatedAt   time.Time    `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+	ID          string       `gorm:"column:id;primaryKey" json:"id"`                       // 唯一标识符（UUID）
+	ApiKeyValue string       `gorm:"column:api_key_value" json:"api_key_value"`             // Key 值（gw_ 前缀 + 32 位随机字符）
+	Description string       `gorm:"column:description" json:"description"`                // 描述信息
+	Status      ApiKeyStatus `gorm:"column:status" json:"status"`                           // 当前状态
+	IssuedAt    time.Time    `gorm:"column:issued_at;autoCreateTime" json:"issued_at"`      // 颁发时间
+	ExpiresAt   *time.Time   `gorm:"column:expires_at" json:"expires_at"`                   // 过期时间（nil 表示永不过期）
+	LastUsedAt  *time.Time   `gorm:"column:last_used_at" json:"last_used_at"`               // 最后使用时间
+	CreatedAt   time.Time    `gorm:"column:created_at;autoCreateTime" json:"created_at"`    // 创建时间
+	UpdatedAt   time.Time    `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`    // 更新时间
 }
 
 // TableName 指定表名
@@ -89,7 +97,10 @@ func (a *ApiKeyEntity) MarkExpired() {
 	a.Status = ApiKeyStatusExpired
 }
 
-// IsUsable 检查 API Key 是否可用
+// IsUsable 检查 API Key 是否可用。
+//
+// 可用条件：状态为 ACTIVE 或 UNUSED，且未超过过期时间。
+// 如果检测到已过期，会自动将状态更新为 EXPIRED。
 func (a *ApiKeyEntity) IsUsable() bool {
 	if !a.Status.IsUsable() {
 		return false
@@ -124,7 +135,12 @@ func (a *ApiKeyEntity) UpdateDescription(description string) {
 	a.Description = description
 }
 
-// GetRemainingDays 获取剩余有效天数
+// GetRemainingDays 获取剩余有效天数。
+//
+// 返回值：
+//   - nil：永不过期
+//   - 0：已过期
+//   - >0：剩余天数
 func (a *ApiKeyEntity) GetRemainingDays() *int64 {
 	if a.ExpiresAt == nil {
 		return nil // 永不过期

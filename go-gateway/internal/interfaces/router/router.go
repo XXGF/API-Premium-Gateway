@@ -1,3 +1,7 @@
+// Package router 定义了 HTTP 路由注册。
+//
+// 该包属于 DDD 架构的接口层，负责将所有 HTTP 端点注册到 Gin 路由器，
+// 并配置中间件链（CORS → 异常处理 → API Key 认证）。
 package router
 
 import (
@@ -8,7 +12,13 @@ import (
 	"github.com/lucky-aeon/api-premium-gateway/go-gateway/internal/interfaces/middleware"
 )
 
-// SetupRouter 设置路由
+// SetupRouter 设置并返回配置完成的 Gin 路由器。
+//
+// 路由分组：
+//   - /api/health：健康检查（无需认证）
+//   - /api/external/gateway/*：网关核心接口（需认证）
+//   - /api/external/api-instances/*：API 实例管理接口（需认证）
+//   - /api/admin/*：管理接口（需认证）
 func SetupRouter(
 	authService *appService.AuthenticationAppService,
 	selectionAppService *appService.SelectionAppService,
