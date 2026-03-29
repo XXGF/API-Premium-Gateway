@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: go-gateway-postgres
+    environment:
+      POSTGRES_DB: api_gateway
+      POSTGRES_USER: gateway_user
+      POSTGRES_PASSWORD: gateway_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../docs/sql/sql.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway_user -d api_gateway"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Go Gateway 应用
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go-gateway-app
+    ports:
+      - "8081:8081"
+    environment:
+      CONFIG_PATH: /app/configs/config.yaml
+      DEFAULT_API_KEY: gw_default_key_for_development
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./configs:/app/configs
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

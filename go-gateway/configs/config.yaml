@@ -1,0 +1,18 @@
+server:
+  port: 8081
+  context_path: /api
+
+database:
+  host: localhost
+  port: 5432
+  user: gateway_user
+  password: gateway_pass
+  dbname: api_gateway
+  sslmode: disable
+  max_idle_conns: 5
+  max_open_conns: 20
+  conn_max_lifetime: 300 # 秒
+
+logging:
+  level: debug
+  format: console # console 或 json
